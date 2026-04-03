@@ -7,6 +7,10 @@ Run this on a cron every 15 minutes.
 """
 
 import time
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from core.db       import init_db, insert_listing, update_listing_status
 from core.registry import match_listing_to_complex
 from core.dedup    import is_duplicate
