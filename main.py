@@ -6,7 +6,6 @@ Run this on a cron every 15 minutes.
   python main.py --daemon  # run continuously + keep webhook alive
 """
 
-import sys
 import time
 from core.db       import init_db, insert_listing, update_listing_status
 from core.registry import match_listing_to_complex
@@ -117,36 +116,12 @@ def run_pipeline():
 
 def main():
     init_db()
-
-    daemon_mode = "--daemon" in sys.argv
-
-    # Check Ollama on startup
-    if USE_LLM:
-        llm_ok = check_ollama()
-        if not llm_ok:
-            print("[main] WARNING: LLM unavailable — falling back to rule-based scam detection")
-
-    if daemon_mode:
-        start_webhook_server()
-        print("[main] Running in daemon mode. Ctrl+C to stop.")
-        print("[main] Remember to expose port 5001 for Twilio webhook.")
-        print("[main]   Use: ngrok http 5001")
-        run_pipeline()
-        try:
-            while True:
-                time.sleep(15 * 60)
-                run_pipeline()
-        except KeyboardInterrupt:
-            print("\n[main] Stopped.")
-    else:
-        start_webhook_server()
-        run_pipeline()
-        print(f"[main] Waiting for SMS replies (Ctrl+C to exit)...")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
+    start_webhook_server()
+    run_pipeline()
+    # Keep process alive briefly so Flask can handle any Apply/Skip clicks
+    # that arrive immediately after the digest email
+    print("[main] Pipeline complete. Staying alive for 5 min for button clicks...")
+    time.sleep(5 * 60)
 
 
 if __name__ == "__main__":

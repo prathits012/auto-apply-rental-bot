@@ -1,1 +1,1 @@
-web: python main.py --daemon
+web: python main.py
