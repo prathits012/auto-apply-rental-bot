@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from playwright.sync_api import sync_playwright; print\\(''playwright ok''\\)\")",
+      "Bash(python3 -c \"from playwright.sync_api import sync_playwright; print\\(''playwright ok''\\)\")",
+      "Bash(pip3 install:*)",
+      "Bash(playwright install:*)"
+    ]
+  }
+}
