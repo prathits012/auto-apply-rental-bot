@@ -1,5 +1,0 @@
-[phases.install]
-cmds = [
-  "pip3 install -r requirements.txt",
-  "playwright install chromium --with-deps"
-]
