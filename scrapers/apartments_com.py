@@ -245,11 +245,24 @@ def scrape() -> list[dict]:
     listings = []
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=APARTMENTS_COM_HEADLESS)
+        browser = pw.chromium.launch(
+            headless=APARTMENTS_COM_HEADLESS,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
+        )
         context = browser.new_context(
             user_agent=USER_AGENT,
             viewport={"width": 1280, "height": 900},
             locale="en-US",
+            java_script_enabled=True,
+            ignore_https_errors=True,
+        )
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
         context.set_extra_http_headers({"Accept-Language": "en-US,en;q=0.9"})
         page = context.new_page()
