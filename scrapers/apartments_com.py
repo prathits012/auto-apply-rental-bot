@@ -284,7 +284,7 @@ def scrape() -> list[dict]:
                     except Exception:
                         continue
                 if not found:
-                    print(f"  [apartments_com] search page {page_num} failed: no listing cards found (possible bot block)")
+                    print(f"  [apartments_com] bot block detected — skipping (cloud IP blocked by apartments.com)")
                     break
             except Exception as e:
                 print(f"  [apartments_com] search page {page_num} failed: {e}")
