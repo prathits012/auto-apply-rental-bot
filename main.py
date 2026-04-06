@@ -107,6 +107,25 @@ def run_pipeline():
     all_listings += apartments_com.scrape()
     all_listings += padmapper.scrape()
 
+    # In-run dedup: collapse same building + same beds to cheapest unit
+    # (prevents 30x "255 King St" from one multi-floorplan complex)
+    from core.dedup import _normalize_address
+    seen_keys: set = set()
+    deduped = []
+    # Sort so cheapest price wins for each key
+    for listing in sorted(all_listings, key=lambda x: (x.get("price") or 99999)):
+        addr = _normalize_address(listing.get("address") or "").strip()
+        beds = listing.get("beds")
+        key = (addr, beds) if addr else None
+        if key and key in seen_keys:
+            continue
+        if key:
+            seen_keys.add(key)
+        deduped.append(listing)
+    if len(deduped) < len(all_listings):
+        print(f"  [pipeline] In-run dedup: {len(all_listings)} → {len(deduped)} listings")
+    all_listings = deduped
+
     print(f"\n[pipeline] Processing {len(all_listings)} total listings...")
     for listing in all_listings:
         try:
