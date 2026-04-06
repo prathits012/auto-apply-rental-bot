@@ -1,7 +1,8 @@
 [phases.install]
 cmds = [
-  "python -m pip install -r requirements.txt",
-  "python -m playwright install chromium --with-deps"
+  "python -m venv /opt/venv",
+  "/opt/venv/bin/pip install -r requirements.txt",
+  "/opt/venv/bin/playwright install chromium --with-deps"
 ]
 
 [start]
