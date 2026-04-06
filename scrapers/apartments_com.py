@@ -96,13 +96,24 @@ def _build_search_url(page_num: int = 1) -> str:
 def _collect_listing_urls(page) -> list[str]:
     """Extract detail-page URLs from a search results page."""
     urls = []
-    cards = page.query_selector_all("article.placard")
-    for card in cards:
-        link = card.query_selector("a.property-link")
-        if link:
-            href = link.get_attribute("href")
-            if href and href.startswith("http"):
-                urls.append(href)
+    # Try multiple card + link selector combinations
+    for card_sel, link_sel in [
+        ("article.placard", "a.property-link"),
+        ("li[data-listingid]", "a[href*='apartments.com']"),
+        ("[class*='placard']", "a[href*='apartments.com']"),
+        (".property-card", "a[href*='apartments.com']"),
+    ]:
+        cards = page.query_selector_all(card_sel)
+        if not cards:
+            continue
+        for card in cards:
+            link = card.query_selector(link_sel) or card.query_selector("a[href]")
+            if link:
+                href = link.get_attribute("href")
+                if href and href.startswith("http") and "apartments.com" in href:
+                    urls.append(href)
+        if urls:
+            break
     return urls
 
 
@@ -250,8 +261,18 @@ def scrape() -> list[dict]:
             print(f"[apartments_com] Fetching search page {page_num}: {url}")
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                # Wait for listing cards to appear
-                page.wait_for_selector("article.placard", timeout=15000)
+                # Try multiple known selector patterns — apartments.com changes these
+                found = False
+                for selector in ["article.placard", "li[data-listingid]", "[class*='placard']", ".property-card", "#placardContainer article"]:
+                    try:
+                        page.wait_for_selector(selector, timeout=8000)
+                        found = True
+                        break
+                    except Exception:
+                        continue
+                if not found:
+                    print(f"  [apartments_com] search page {page_num} failed: no listing cards found (possible bot block)")
+                    break
             except Exception as e:
                 print(f"  [apartments_com] search page {page_num} failed: {e}")
                 break

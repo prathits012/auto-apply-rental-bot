@@ -173,12 +173,23 @@ def scrape() -> list[dict]:
             "min_bedrooms": int(FILTERS.get("min_beds", 0)),
         }
 
-        try:
-            resp = requests.post(API_URL, headers=HEADERS, json=payload, timeout=15)
-            resp.raise_for_status()
-            raw_list = resp.json()
-        except Exception as e:
-            print(f"  [padmapper] API error at offset {offset}: {e}")
+        raw_list = None
+        for attempt in range(3):
+            try:
+                resp = requests.post(API_URL, headers=HEADERS, json=payload, timeout=15)
+                if resp.status_code == 429:
+                    wait = 10 * (2 ** attempt)
+                    print(f"  [padmapper] 429 rate limit, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                raw_list = resp.json()
+                break
+            except Exception as e:
+                print(f"  [padmapper] API error at offset {offset} (attempt {attempt+1}): {e}")
+                if attempt < 2:
+                    time.sleep(5)
+        if raw_list is None:
             break
 
         if not raw_list:
