@@ -103,9 +103,11 @@ def _normalize(raw: dict):
             if src:
                 image_urls.append(src)
 
-    # Title
-    title = raw.get("title") or ""
-    if not title:
+    # Title — ignore short floorplan codes like "A9", "A28", "A2-H"
+    raw_title = raw.get("title") or ""
+    if raw_title and len(raw_title) > 8 and " " in raw_title:
+        title = raw_title
+    else:
         bd = f"{int(beds)}BD" if beds is not None else "?"
         ba = f"/{int(baths)}BA" if baths is not None else ""
         street = address.split(",")[0] if address else ""
