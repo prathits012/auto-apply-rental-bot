@@ -8,6 +8,7 @@ SF city_id = 2777 (discovered via page source inspection).
 """
 
 import time
+import random
 import requests
 from datetime import datetime, timezone
 from config import FILTERS, MAX_LISTING_AGE_HOURS
@@ -15,15 +16,21 @@ from core.geo import within_radius
 
 SF_CITY_ID = 2777
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/124.0.0.0 Safari/537.36",
-    "Accept":          "application/json",
-    "Content-Type":    "application/json",
-    "Referer":         "https://www.padmapper.com/apartments/san-francisco-ca",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+_USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+]
+
+def _make_headers():
+    return {
+        "User-Agent":      random.choice(_USER_AGENTS),
+        "Accept":          "application/json",
+        "Content-Type":    "application/json",
+        "Referer":         "https://www.padmapper.com/apartments/san-francisco-ca",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
 
 API_URL = "https://www.padmapper.com/api/t/1/listings"
 PAGE_SIZE = 50
@@ -161,6 +168,8 @@ def scrape() -> list[dict]:
     seen_ids = set()
     offset = 0
 
+    # Random startup delay to avoid synchronized hourly hits from Railway
+    time.sleep(random.uniform(3, 12))
     print("[padmapper] Scraping SF rentals...")
 
     while True:
@@ -176,7 +185,7 @@ def scrape() -> list[dict]:
         raw_list = None
         for attempt in range(2):
             try:
-                resp = requests.post(API_URL, headers=HEADERS, json=payload, timeout=15)
+                resp = requests.post(API_URL, headers=_make_headers(), json=payload, timeout=15)
                 if resp.status_code == 429:
                     if attempt == 0:
                         print(f"  [padmapper] 429 rate limit, retrying in 15s...")
@@ -233,7 +242,7 @@ def scrape() -> list[dict]:
             break
 
         offset += PAGE_SIZE
-        time.sleep(1.5)
+        time.sleep(random.uniform(2, 4))
 
     print(f"[padmapper] Found {len(all_listings)} listings after filtering")
     return all_listings
