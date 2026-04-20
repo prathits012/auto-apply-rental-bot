@@ -75,9 +75,24 @@ def init_db():
             sent_at     TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+            address_key  TEXT PRIMARY KEY,
+            lat          REAL NOT NULL,
+            lng          REAL NOT NULL,
+            cached_at    TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS seen_email_uids (
+            uid       TEXT PRIMARY KEY,
+            seen_at   TEXT DEFAULT (datetime('now'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_listings_complex ON listings(complex_id);
         CREATE INDEX IF NOT EXISTS idx_listings_status  ON listings(status);
         CREATE INDEX IF NOT EXISTS idx_listings_seen    ON listings(seen_at);
+
+        -- Prune old email UIDs (keep 30 days)
+        DELETE FROM seen_email_uids WHERE seen_at < datetime('now', '-30 days');
         """)
 
 
@@ -185,6 +200,41 @@ def get_pending_listings() -> list:
             "SELECT * FROM listings WHERE status='alerted'"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Geocode cache ─────────────────────────────────────────────
+
+def get_geocode_cache(address_key: str):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT lat, lng FROM geocode_cache WHERE address_key=?", (address_key,)
+        ).fetchone()
+    return (row["lat"], row["lng"]) if row else None
+
+
+def set_geocode_cache(address_key: str, lat: float, lng: float):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO geocode_cache (address_key, lat, lng) VALUES (?,?,?)",
+            (address_key, lat, lng)
+        )
+
+
+# ── Seen email UIDs ───────────────────────────────────────────
+
+def has_seen_email_uid(uid: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM seen_email_uids WHERE uid=?", (uid,)
+        ).fetchone()
+    return row is not None
+
+
+def add_seen_email_uid(uid: str):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO seen_email_uids (uid) VALUES (?)", (uid,)
+        )
 
 
 # ── SMS log ───────────────────────────────────────────────────

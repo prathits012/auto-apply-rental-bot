@@ -17,7 +17,7 @@ from core.dedup    import is_duplicate
 from core.scam     import score_listing as rule_based_score
 from core.llm      import analyze_scam, enrich_listing, check_ollama
 from notifications.email import send_alert, send_digest, start_webhook_server
-from scrapers      import craigslist, redfin, apartments_com, padmapper
+from scrapers      import craigslist, zillow_email, redfin_email, apartments_email
 from config        import USE_LLM, APPLICANT_PROFILE
 
 
@@ -103,9 +103,9 @@ def run_pipeline():
 
     all_listings = []
     all_listings += craigslist.scrape()
-    all_listings += redfin.scrape()
-    all_listings += apartments_com.scrape()
-    all_listings += padmapper.scrape()
+    all_listings += zillow_email.scrape()
+    all_listings += redfin_email.scrape()
+    all_listings += apartments_email.scrape()
 
     # In-run dedup: collapse same building + same beds to cheapest unit
     # (prevents 30x "255 King St" from one multi-floorplan complex)
