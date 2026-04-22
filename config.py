@@ -87,6 +87,6 @@ FUZZY_MATCH_THRESHOLD = int(_opt("FUZZY_MATCH_THRESHOLD", "85"))
 # ── Email alert senders (inbound) ─────────────────────────────
 # Verify these against the first real alert email you receive —
 # update the Railway env var if the actual sender differs.
-ZILLOW_EMAIL_SENDER     = _opt("ZILLOW_EMAIL_SENDER",     "noreply@zillow.com")
+ZILLOW_EMAIL_SENDER     = _opt("ZILLOW_EMAIL_SENDER",     "rental-instant-updates@mail.zillow.com")
 REDFIN_EMAIL_SENDER     = _opt("REDFIN_EMAIL_SENDER",     "listings@redfin.com")
 APARTMENTS_EMAIL_SENDER = _opt("APARTMENTS_EMAIL_SENDER", "automated@apartments.com")
