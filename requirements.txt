@@ -5,3 +5,5 @@ rapidfuzz==3.9.3
 flask==3.0.3
 geopy==2.4.1
 python-dotenv==1.0.1
+Pillow==10.3.0
+imagehash==4.3.1
