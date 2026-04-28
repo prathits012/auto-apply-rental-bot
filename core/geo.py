@@ -34,49 +34,89 @@ def _normalize_address_key(address: str) -> str:
     return re.sub(r"\s+", " ", a).strip()
 
 
-def geocode_and_cache(address: str) -> tuple[float | None, float | None]:
+def _strip_unit(address: str) -> str:
+    """Remove apartment/unit/suite numbers that confuse Nominatim."""
+    return re.sub(
+        r"\s*(?:#|apt\.?|apartment|unit|ste\.?|suite|floor|fl\.?)\s*[\w-]+",
+        "", address, flags=re.I
+    ).strip().rstrip(",")
+
+
+def _geocode_nominatim(address: str) -> tuple[float | None, float | None, str | None]:
+    """Fallback geocoder using Nominatim (OpenStreetMap). No API key needed."""
+    try:
+        from geopy.geocoders import Nominatim
+        geolocator = Nominatim(user_agent="sf_rental_bot/1.0")
+        # Try original address first, then stripped version
+        for query in [address, _strip_unit(address)]:
+            location = geolocator.geocode(query, timeout=8)
+            if location:
+                return location.latitude, location.longitude, location.address
+    except Exception as e:
+        print(f"  [geocode/nominatim] failed for '{address}': {e}")
+    return None, None, None
+
+
+def geocode_full(address: str) -> tuple[float | None, float | None, str | None]:
     """
-    Convert an address string to (lat, lng).
-    Checks in-memory cache → DB cache → Google Maps API.
-    Returns (None, None) if geocoding fails or API key is missing.
+    Convert an address to (lat, lng, formatted_address).
+    Tries Google Maps API first (if key present), falls back to Nominatim.
+    Returns (None, None, None) on complete failure.
     """
-    if not address or not GOOGLE_MAPS_API_KEY:
-        return None, None
+    if not address:
+        return None, None, None
 
     key = _normalize_address_key(address)
 
-    # 1. In-memory cache
     if key in _geocode_mem:
         result = _geocode_mem[key]
-        return result if result else (None, None)
+        return (result[0], result[1], None) if result else (None, None, None)
 
-    # 2. DB cache
     from core.db import get_geocode_cache, set_geocode_cache
     cached = get_geocode_cache(key)
     if cached:
         _geocode_mem[key] = cached
-        return cached
+        return cached[0], cached[1], None
 
-    # 3. Google Maps API
-    try:
-        import requests
-        resp = requests.get(
-            "https://maps.googleapis.com/maps/api/geocode/json",
-            params={"address": address, "key": GOOGLE_MAPS_API_KEY},
-            timeout=5,
-        )
-        data = resp.json()
-        if data.get("status") == "OK" and data.get("results"):
-            loc = data["results"][0]["geometry"]["location"]
-            lat, lng = float(loc["lat"]), float(loc["lng"])
-            _geocode_mem[key] = (lat, lng)
-            set_geocode_cache(key, lat, lng)
-            return lat, lng
-    except Exception as e:
-        print(f"  [geocode] failed for '{address}': {e}")
+    lat, lng, formatted = None, None, None
+
+    # 1. Google Maps API (preferred — handles noisy input well)
+    if GOOGLE_MAPS_API_KEY:
+        try:
+            import requests
+            resp = requests.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"address": address, "key": GOOGLE_MAPS_API_KEY},
+                timeout=5,
+            )
+            data = resp.json()
+            if data.get("status") == "OK" and data.get("results"):
+                result = data["results"][0]
+                loc = result["geometry"]["location"]
+                lat, lng = float(loc["lat"]), float(loc["lng"])
+                formatted = result.get("formatted_address", "")
+        except Exception as e:
+            print(f"  [geocode/maps] failed for '{address}': {e}")
+
+    # 2. Nominatim fallback
+    if lat is None:
+        # Nominatim needs a clean address — append city if missing
+        query = address if "san francisco" in address.lower() else f"{address}, San Francisco, CA"
+        lat, lng, formatted = _geocode_nominatim(query)
+
+    if lat is not None:
+        _geocode_mem[key] = (lat, lng)
+        set_geocode_cache(key, lat, lng)
+        return lat, lng, formatted
 
     _geocode_mem[key] = None
-    return None, None
+    return None, None, None
+
+
+def geocode_and_cache(address: str) -> tuple[float | None, float | None]:
+    """Convert an address string to (lat, lng). Uses geocode_full internally."""
+    lat, lng, _ = geocode_full(address)
+    return lat, lng
 
 
 def bounding_box() -> dict:

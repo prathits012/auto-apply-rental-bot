@@ -68,6 +68,21 @@ def get_html_body(msg: email.message.Message) -> str | None:
     return None
 
 
+def get_email_subject(msg: email.message.Message) -> str | None:
+    """Return the decoded Subject header, or None."""
+    raw = msg.get("Subject", "")
+    if not raw:
+        return None
+    parts = _decode_header(raw)
+    decoded = []
+    for part, charset in parts:
+        if isinstance(part, bytes):
+            decoded.append(part.decode(charset or "utf-8", errors="replace"))
+        else:
+            decoded.append(part)
+    return "".join(decoded)
+
+
 def get_email_date(msg: email.message.Message) -> str | None:
     """Return ISO timestamp from the email's Date header, or None."""
     from email.utils import parsedate_to_datetime

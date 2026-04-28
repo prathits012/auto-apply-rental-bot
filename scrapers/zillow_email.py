@@ -13,8 +13,8 @@ import hashlib
 from bs4 import BeautifulSoup
 
 from config import ZILLOW_EMAIL_SENDER, FILTERS
-from scrapers.email_reader import fetch_unread, get_html_body, get_email_date
-from core.geo import geocode_and_cache, within_radius
+from scrapers.email_reader import fetch_unread, get_html_body, get_email_date, get_email_subject
+from core.geo import geocode_full, within_radius
 from core.db import has_seen_email_uid, add_seen_email_uid
 
 
@@ -49,79 +49,104 @@ def _parse_sqft(text: str) -> int | None:
     return int(m.group(1).replace(",", "")) if m else None
 
 
-def _parse_email(html: str, email_date: str | None) -> list[dict]:
+def _extract_subject_address(subject: str | None) -> str | None:
+    """
+    Zillow 'just listed' subjects look like:
+      "3415 22nd St APT 11 just listed in 'For Rent near...'"
+    Extract the address portion before 'just listed'.
+    """
+    if not subject:
+        return None
+    m = re.search(r"^(.+?)\s+just listed\b", subject, re.I)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _parse_email(html: str, email_date: str | None, subject: str | None = None) -> list[dict]:
     """
     Parse one Zillow alert email HTML → list of raw listing dicts.
-    Never raises; logs parse errors and returns partial results.
+
+    Strategy:
+    1. For 'just listed' emails, the subject line contains a clean address.
+    2. Otherwise, find price positions in the body and extract a text window.
+       Pass the noisy window directly to geocode_full — Maps API handles noise well.
     """
     listings = []
     try:
         soup = BeautifulSoup(html, "html.parser")
+        full_text = soup.get_text(" ", strip=True)
 
-        # Zillow emails: listings are linked via <a href="https://www.zillow.com/...">
-        # Each listing block contains address, price, beds/baths text nearby.
-        # Strategy: find all zillow rental/homedetail links, then walk up to
-        # the containing block to extract sibling text.
-        seen_urls = set()
+        # Collect all click-tracking listing URLs
+        listing_urls = []
+        for a_tag in soup.find_all("a", href=re.compile(r"click\.mail\.zillow\.com", re.I)):
+            link_text = a_tag.get_text(" ", strip=True)
+            if re.search(r"\$[\d,]+", link_text) or re.search(r"\d+\s+bd", link_text, re.I):
+                listing_urls.append(a_tag.get("href", ""))
 
-        # Find all <a> tags pointing to zillow listing pages
-        for a_tag in soup.find_all("a", href=re.compile(r"zillow\.com.*(homedetails|rental)", re.I)):
-            url = a_tag.get("href", "").split("?")[0].strip()
-            if not url or url in seen_urls:
-                continue
-            seen_urls.add(url)
+        # Try subject-line address first (clean, no regex noise)
+        subject_address = _extract_subject_address(subject)
 
-            # Walk up to find a container td/div/table that holds the listing block
-            container = a_tag
-            for _ in range(6):
-                parent = container.parent
-                if parent is None:
-                    break
-                container = parent
-                # Stop at a reasonably sized block
-                text = container.get_text(" ", strip=True)
-                if len(text) > 30:
-                    break
+        # Find all price occurrences — each marks a listing block
+        price_positions = [m.start() for m in re.finditer(r"\$[\d,]+/mo", full_text)]
 
-            text = container.get_text(" ", strip=True)
+        # Image (shared across all listings in email)
+        img_tag = soup.find("img", src=re.compile(r"https?://.*\.(jpg|jpeg|png|webp)", re.I))
+        image_url = img_tag["src"] if img_tag else ""
 
-            # Extract fields from the container text
-            price = _parse_price(text)
-            beds = _parse_beds(text)
-            baths = _parse_baths(text)
-            sqft = _parse_sqft(text)
+        seen_raw = set()
 
-            # Address: look for an <address> tag or text that looks like a street
-            address = ""
-            addr_tag = container.find("address")
-            if addr_tag:
-                address = addr_tag.get_text(" ", strip=True)
+        for i, pos in enumerate(price_positions):
+            chunk = full_text[pos:pos + 400]
+
+            price = _parse_price(chunk)
+            beds  = _parse_beds(chunk)
+            baths = _parse_baths(chunk)
+            sqft  = _parse_sqft(chunk)
+
+            # Address candidates, in priority order:
+            # 1. Subject-line address (only for first/only listing)
+            # 2. Clean regex match inside the chunk
+            # 3. Whole chunk passed to Maps API (fallback)
+            raw_address = None
+            if i == 0 and subject_address:
+                raw_address = subject_address
             else:
-                # Try to find address-like text: "123 Main St" pattern
-                m = re.search(r"\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:St|Ave|Blvd|Dr|Ln|Way|Pl|Ct|Rd|Ter|Loop|Cir)\b[^$\n]*",
-                               text)
+                m = re.search(
+                    r"\b(\d+\s+[A-Za-z][^|\n]*?"
+                    r"(?:St|Ave|Blvd|Dr|Rd|Way|Ln|Ct|Pl|Ter|Cir|Loop|Hwy|Bridge|Long)\b"
+                    r"[^,\n]{0,30},\s*San Francisco,\s*CA(?:\s+\d{5})?)",
+                    chunk, re.I
+                )
                 if m:
-                    address = m.group(0).strip()
+                    raw_address = m.group(1).strip()
 
-            # Image
-            img_tag = container.find("img", src=re.compile(r"https?://"))
-            image_url = img_tag["src"] if img_tag else ""
+            if not raw_address:
+                # Last resort: pass the whole chunk to Maps — it filters noise
+                raw_address = chunk[:300]
 
-            if not url:
+            # Normalize dedup: if this raw_address contains a previously seen
+            # subject-line address, treat as same listing
+            dedup_key = raw_address[:60]
+            already_seen = dedup_key in seen_raw or any(
+                s in raw_address for s in seen_raw if len(s) > 10
+            )
+            if already_seen:
                 continue
+            seen_raw.add(dedup_key)
 
-            listing_id = _listing_id(url)
+            listing_url = listing_urls[i] if i < len(listing_urls) else (listing_urls[0] if listing_urls else "")
+            listing_id = _listing_id(listing_url or raw_address)
             bd = f"{int(beds)}BD" if beds is not None else "?"
             ba = f"/{int(baths)}BA" if baths is not None else ""
-            street = address.split(",")[0] if address else ""
-            title = f"{bd}{ba} · {street}" if street else f"{bd}{ba}"
+            title = f"{bd}{ba}"  # address filled in after geocoding
 
             listings.append({
                 "id":          listing_id,
                 "source":      "zillow_email",
-                "url":         url,
+                "url":         listing_url,
                 "title":       title,
-                "address":     address,
+                "address":     raw_address,   # may be noisy; geocode_full cleans it
                 "price":       price,
                 "beds":        beds,
                 "baths":       baths,
@@ -162,7 +187,8 @@ def scrape() -> list[dict]:
             continue
 
         email_date = get_email_date(msg)
-        raw_listings = _parse_email(html, email_date)
+        subject = get_email_subject(msg)
+        raw_listings = _parse_email(html, email_date, subject)
 
         if not raw_listings:
             print(f"  [zillow_email] 0 listings parsed from email uid={uid} (template may have changed)")
@@ -180,13 +206,17 @@ def scrape() -> list[dict]:
             if beds is not None and FILTERS.get("min_beds") and beds < FILTERS["min_beds"]:
                 continue
 
-            # Geocode address → lat/lng
+            # Geocode address → lat/lng + clean formatted_address
             if listing["address"]:
-                lat, lng = geocode_and_cache(listing["address"])
+                lat, lng, fmt_addr = geocode_full(listing["address"])
                 listing["lat"] = lat
                 listing["lng"] = lng
+                if fmt_addr:
+                    listing["address"] = fmt_addr
+                    street = fmt_addr.split(",")[0]
+                    bd = listing["title"].split("·")[0].strip() if "·" in listing["title"] else listing["title"]
+                    listing["title"] = f"{bd} · {street}"
             else:
-                # No address in email — drop, don't bypass geo filter
                 print(f"  [zillow_email] no address found, skipping listing {listing['url']}")
                 continue
 
