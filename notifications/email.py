@@ -40,10 +40,13 @@ def _html_alert(listing: dict, scam_score: int, scam_flags: list,
     desc  = (listing.get("description") or "")[:400]
     neighborhood = listing.get("neighborhood", "")
 
-    bed_str   = f"{int(beds)}BD" if beds is not None else "?"
-    bath_str  = f"/{int(baths)}BA" if baths is not None else ""
-    price_str = f"${price:,}/mo" if price else "Price unknown"
-    sqft_str  = f"{sqft:,} sqft" if sqft else ""
+    bed_str    = f"{int(beds)}BD" if beds is not None else "?"
+    bath_str   = f"/{int(baths)}BA" if baths is not None else ""
+    price_str  = f"${price:,}/mo" if price else "Price unknown"
+    sqft_str   = f"{sqft:,} sqft" if sqft else ""
+    commute_mins = listing.get("commute_minutes")
+    commute_dest = listing.get("commute_destination", "work")
+    commute_str  = f"🚗 {commute_mins} min drive to {commute_dest}" if commute_mins else ""
 
     MAX_SCAM_SCORE = 225
     scam_pct = min(round(scam_score / MAX_SCAM_SCORE * 100), 100)
@@ -77,6 +80,7 @@ def _html_alert(listing: dict, scam_score: int, scam_flags: list,
         <table style="width:100%;border-collapse:collapse;margin:12px 0;">
             <tr><td style="padding:4px 0;color:#555;">Address</td><td><strong>{addr}</strong></td></tr>
             {"<tr><td style='padding:4px 0;color:#555;'>Size</td><td><strong>" + sqft_str + "</strong></td></tr>" if sqft_str else ""}
+            {"<tr><td style='padding:4px 0;color:#555;'>Commute</td><td><strong>" + commute_str + "</strong></td></tr>" if commute_str else ""}
             <tr><td style="padding:4px 0;color:#555;">Source</td><td>{src}</td></tr>
         </table>
 
@@ -112,6 +116,10 @@ def _text_alert(listing: dict, scam_score: int, scam_flags: list) -> str:
     lines = [
         f"{bed_str}{bath_str} · {price_str}",
         f"Address: {listing.get('address', 'N/A')}",
+    ]
+    if listing.get("commute_minutes"):
+        lines.append(f"Commute: 🚗 {listing['commute_minutes']} min to {listing.get('commute_destination','work')}")
+    lines += [
         f"Source: {listing.get('source', '')}",
         f"URL: {listing.get('url', '')}",
     ]

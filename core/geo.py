@@ -119,6 +119,56 @@ def geocode_and_cache(address: str) -> tuple[float | None, float | None]:
     return lat, lng
 
 
+def get_commute_minutes(
+    origin_lat: float,
+    origin_lng: float,
+    destination: str,
+    departure_hour: int = 9,
+) -> int | None:
+    """
+    Get driving commute time in minutes from (lat,lng) to destination
+    at departure_hour (local time) on the next Monday morning.
+    Uses Google Maps Distance Matrix API with traffic model.
+    Returns None if the API is unavailable.
+    """
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    try:
+        import requests
+        from datetime import datetime, timedelta, timezone
+        # Find next Monday at departure_hour UTC-8 (Pacific)
+        now = datetime.now(timezone.utc)
+        days_until_monday = (7 - now.weekday()) % 7 or 7
+        next_monday = now + timedelta(days=days_until_monday)
+        # 9 AM Pacific Standard = 17:00 UTC (approximate, ignores DST)
+        departure = next_monday.replace(hour=departure_hour + 8, minute=0, second=0, microsecond=0)
+        departure_ts = int(departure.timestamp())
+
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            params={
+                "origins":         f"{origin_lat},{origin_lng}",
+                "destinations":    destination,
+                "mode":            "driving",
+                "departure_time":  departure_ts,
+                "traffic_model":   "best_guess",
+                "key":             GOOGLE_MAPS_API_KEY,
+            },
+            timeout=5,
+        )
+        data = resp.json()
+        if data.get("status") == "OK":
+            elem = data["rows"][0]["elements"][0]
+            if elem.get("status") == "OK":
+                # Prefer duration_in_traffic (with traffic), fall back to duration
+                secs = elem.get("duration_in_traffic", elem.get("duration", {})).get("value")
+                if secs:
+                    return round(secs / 60)
+    except Exception as e:
+        print(f"  [commute] failed: {e}")
+    return None
+
+
 def bounding_box() -> dict:
     """Return a lat/lng bounding box dict for use in API queries."""
     delta_lat = SEARCH_RADIUS_MILES / 69.0

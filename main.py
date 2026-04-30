@@ -19,6 +19,7 @@ from core.llm      import analyze_scam, enrich_listing, check_ollama
 from notifications.email import send_alert, send_digest, start_webhook_server, clear_pending
 from scrapers      import craigslist, zillow_email, redfin_email, apartments_email
 from config        import USE_LLM, APPLICANT_PROFILE, PROFILES
+from core.geo      import get_commute_minutes
 import math as _math
 
 
@@ -166,8 +167,15 @@ def run_pipeline():
         name = profile.get("name", "Search")
         print(f"\n[pipeline] Profile '{name}': {len(profile_listings)} listings → {recipients}")
 
+        commute_dest = profile.get("commute_destination")
         for listing in profile_listings:
             try:
+                # Add commute time if profile has a destination and listing has coords
+                if commute_dest and listing.get("lat") and listing.get("lng"):
+                    mins = get_commute_minutes(listing["lat"], listing["lng"], commute_dest)
+                    if mins is not None:
+                        listing["commute_minutes"] = mins
+                        listing["commute_destination"] = commute_dest
                 process_listing(listing)
             except Exception as e:
                 print(f"  [pipeline] Error on {listing.get('id')}: {e}")
