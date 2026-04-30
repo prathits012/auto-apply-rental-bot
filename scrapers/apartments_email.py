@@ -11,9 +11,9 @@ import re
 import hashlib
 from bs4 import BeautifulSoup
 
-from config import APARTMENTS_EMAIL_SENDER, FILTERS
+from config import APARTMENTS_EMAIL_SENDER
 from scrapers.email_reader import fetch_unread, get_html_body, get_email_date
-from core.geo import geocode_full, within_radius
+from core.geo import geocode_full
 from core.db import has_seen_email_uid, add_seen_email_uid
 
 
@@ -156,16 +156,6 @@ def scrape() -> list[dict]:
             continue
 
         for listing in raw_listings:
-            price, beds = listing.get("price"), listing.get("beds")
-            if price and FILTERS.get("max_price") and price > FILTERS["max_price"]:
-                continue
-            if price and FILTERS.get("min_price") and price < FILTERS["min_price"]:
-                continue
-            if beds is not None and FILTERS.get("max_beds") and beds > FILTERS["max_beds"]:
-                continue
-            if beds is not None and FILTERS.get("min_beds") and beds < FILTERS["min_beds"]:
-                continue
-
             if listing["address"]:
                 lat, lng, fmt_addr = geocode_full(listing["address"])
                 listing["lat"] = lat
@@ -179,10 +169,7 @@ def scrape() -> list[dict]:
                 print(f"  [apartments_email] no address found, skipping listing {listing['url']}")
                 continue
 
-            if not within_radius(listing["lat"], listing["lng"]):
-                continue
-
             results.append(listing)
 
-    print(f"[apartments_email] Found {len(results)} listings after filtering")
+    print(f"[apartments_email] Parsed {len(results)} listings")
     return results

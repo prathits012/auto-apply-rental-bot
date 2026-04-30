@@ -22,7 +22,11 @@
       "Bash(curl -s -X POST https://backboard.railway.com/graphql/v2 -H \"Authorization: Bearer c3191c56-483f-468b-8159-cc5190357d12\" -H \"Content-Type: application/json\" -d '{\"\"\"\"query\"\"\"\": \"\"\"\"query { deploymentLogs\\(deploymentId: \\\\\"\"\"\"18bd1927-aa15-4e0d-9b16-439efe251b13\\\\\"\"\"\"\\) { message } }\"\"\"\"}')",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d\\)\")",
       "Bash(python3 -:*)",
-      "Bash(curl -s --max-time 10 \"https://sfbay.craigslist.org/search/sfc/apa?format=rss\")"
+      "Bash(curl -s --max-time 10 \"https://sfbay.craigslist.org/search/sfc/apa?format=rss\")",
+      "Bash(curl -s -X POST https://backboard.railway.com/graphql/v2 -H \"Authorization: Bearer c3191c56-483f-468b-8159-cc5190357d12\" -H \"Content-Type: application/json\" -d '{\"\"\"\"query\"\"\"\":\"\"\"\"{ project\\(id: \\\\\"\"\"\"2a725dd2-9326-48f5-af13-9a5b3bea4a32\\\\\"\"\"\"\\) { services { edges { node { name deployments\\(last: 1\\) { edges { node { id status createdAt } } } } } } } }\"\"\"\"}')",
+      "Bash(curl -s -X POST https://backboard.railway.com/graphql/v2 -H \"Authorization: Bearer c3191c56-483f-468b-8159-cc5190357d12\" -H \"Content-Type: application/json\" -d '{\"\"\"\"query\"\"\"\":\"\"\"\"{ project\\(id: \\\\\"\"\"\"2a725dd2-9326-48f5-af13-9a5b3bea4a32\\\\\"\"\"\"\\) { services { edges { node { name deployments\\(last: 2\\) { edges { node { id status createdAt } } } } } } } }\"\"\"\"}')",
+      "Bash(curl -s -X POST https://backboard.railway.com/graphql/v2 -H \"Authorization: Bearer c3191c56-483f-468b-8159-cc5190357d12\" -H \"Content-Type: application/json\" -d '{\"\"\"\"query\"\"\"\":\"\"\"\"{ deploymentLogs\\(deploymentId: \\\\\"\"\"\"96eafc09-00d2-4454-accd-93a20f6a3d04\\\\\"\"\"\"\\) { message severity timestamp } }\"\"\"\"}')",
+      "Bash(curl -s -X POST https://backboard.railway.com/graphql/v2 -H \"Authorization: Bearer c3191c56-483f-468b-8159-cc5190357d12\" -H \"Content-Type: application/json\" -d '{\"\"\"\"query\"\"\"\":\"\"\"\"{ project\\(id: \\\\\"\"\"\"2a725dd2-9326-48f5-af13-9a5b3bea4a32\\\\\"\"\"\"\\) { environments { edges { node { id name } } } } }\"\"\"\"}')"
     ]
   }
 }

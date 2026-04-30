@@ -16,9 +16,10 @@ from core.registry import match_listing_to_complex
 from core.dedup    import is_duplicate
 from core.scam     import score_listing as rule_based_score
 from core.llm      import analyze_scam, enrich_listing, check_ollama
-from notifications.email import send_alert, send_digest, start_webhook_server
+from notifications.email import send_alert, send_digest, start_webhook_server, clear_pending
 from scrapers      import craigslist, zillow_email, redfin_email, apartments_email
-from config        import USE_LLM, APPLICANT_PROFILE
+from config        import USE_LLM, APPLICANT_PROFILE, PROFILES
+import math as _math
 
 
 def process_listing(listing: dict):
@@ -97,8 +98,42 @@ def process_listing(listing: dict):
     )
 
 
+def _passes_profile(listing: dict, profile: dict) -> bool:
+    """Return True if the listing matches a profile's price/beds/geo criteria."""
+    price = listing.get("price")
+    beds  = listing.get("beds")
+    lat   = listing.get("lat")
+    lng   = listing.get("lng")
+
+    if price:
+        if profile.get("max_price") and price > profile["max_price"]:
+            return False
+        if profile.get("min_price") and price < profile["min_price"]:
+            return False
+    if beds is not None:
+        if profile.get("max_beds") and beds > profile["max_beds"]:
+            return False
+        if profile.get("min_beds") and beds < profile["min_beds"]:
+            return False
+
+    # Geo filter — if geocoding failed (lat/lng None) allow through
+    if lat is not None and lng is not None:
+        R = 3958.8
+        clat, clng = profile["center_lat"], profile["center_lng"]
+        d_lat = _math.radians(lat - clat)
+        d_lng = _math.radians(lng - clng)
+        a = (_math.sin(d_lat/2)**2
+             + _math.cos(_math.radians(clat)) * _math.cos(_math.radians(lat))
+             * _math.sin(d_lng/2)**2)
+        dist = R * 2 * _math.asin(_math.sqrt(a))
+        if dist > profile.get("radius_miles", 0.5):
+            return False
+
+    return True
+
+
 def run_pipeline():
-    """Fetch all sources and process each listing."""
+    """Fetch all sources, then filter and alert per search profile."""
     print("\n── Running pipeline ──────────────────────────────")
 
     all_listings = []
@@ -108,11 +143,9 @@ def run_pipeline():
     all_listings += apartments_email.scrape()
 
     # In-run dedup: collapse same building + same beds to cheapest unit
-    # (prevents 30x "255 King St" from one multi-floorplan complex)
     from core.dedup import _normalize_address
     seen_keys: set = set()
     deduped = []
-    # Sort so cheapest price wins for each key
     for listing in sorted(all_listings, key=lambda x: (x.get("price") or 99999)):
         addr = _normalize_address(listing.get("address") or "").strip()
         beds = listing.get("beds")
@@ -126,14 +159,22 @@ def run_pipeline():
         print(f"  [pipeline] In-run dedup: {len(all_listings)} → {len(deduped)} listings")
     all_listings = deduped
 
-    print(f"\n[pipeline] Processing {len(all_listings)} total listings...")
-    for listing in all_listings:
-        try:
-            process_listing(listing)
-        except Exception as e:
-            print(f"  [pipeline] Error on {listing.get('id')}: {e}")
+    # Process once per profile
+    for profile in PROFILES:
+        profile_listings = [l for l in all_listings if _passes_profile(l, profile)]
+        recipients = profile.get("recipients")
+        name = profile.get("name", "Search")
+        print(f"\n[pipeline] Profile '{name}': {len(profile_listings)} listings → {recipients}")
 
-    send_digest()
+        for listing in profile_listings:
+            try:
+                process_listing(listing)
+            except Exception as e:
+                print(f"  [pipeline] Error on {listing.get('id')}: {e}")
+
+        send_digest(recipients=recipients)
+        clear_pending()
+
     print(f"[pipeline] Done.\n")
 
 

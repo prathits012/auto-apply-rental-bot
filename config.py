@@ -90,3 +90,28 @@ FUZZY_MATCH_THRESHOLD = int(_opt("FUZZY_MATCH_THRESHOLD", "85"))
 ZILLOW_EMAIL_SENDER     = _opt("ZILLOW_EMAIL_SENDER",     "rental-instant-updates@mail.zillow.com")
 REDFIN_EMAIL_SENDER     = _opt("REDFIN_EMAIL_SENDER",     "listings@redfin.com")
 APARTMENTS_EMAIL_SENDER = _opt("APARTMENTS_EMAIL_SENDER", "hello@email.apartments.com")
+
+# ── Search profiles ───────────────────────────────────────────
+# Each profile gets its own filtered digest sent to its own recipients.
+# Set SEARCH_PROFILES env var to a JSON array to override defaults.
+# Example:
+#   [{"name":"SF","center_lat":37.7764,"center_lng":-122.3947,"radius_miles":0.5,
+#     "min_price":2500,"max_price":4500,"min_beds":1,"max_beds":2,
+#     "recipients":["you@gmail.com"]}]
+import json as _json
+_profiles_raw = _opt("SEARCH_PROFILES", "")
+if _profiles_raw:
+    PROFILES = _json.loads(_profiles_raw)
+else:
+    # Default: single profile from existing env vars (backwards compatible)
+    PROFILES = [{
+        "name":         "SF Caltrain",
+        "center_lat":   SEARCH_CENTER_LAT,
+        "center_lng":   SEARCH_CENTER_LNG,
+        "radius_miles": SEARCH_RADIUS_MILES,
+        "min_price":    FILTERS["min_price"],
+        "max_price":    FILTERS["max_price"],
+        "min_beds":     FILTERS["min_beds"],
+        "max_beds":     FILTERS["max_beds"],
+        "recipients":   [r.strip() for r in EMAIL_TO.split(",")],
+    }]

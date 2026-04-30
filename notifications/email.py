@@ -153,7 +153,12 @@ def send_alert(listing: dict, scam_score: int = 0, scam_flags: list = None,
     return token
 
 
-def send_digest():
+def clear_pending():
+    """Clear the pending listings queue (call after each profile's digest)."""
+    _pending.clear()
+
+
+def send_digest(recipients: list[str] | None = None):
     """
     Send one digest email containing all pending listings.
     Call this once at the end of each pipeline run.
@@ -193,16 +198,16 @@ def send_digest():
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = EMAIL_FROM
-    msg["To"]      = ", ".join(r.strip() for r in EMAIL_TO.split(","))
+    to_list = recipients or [r.strip() for r in EMAIL_TO.split(",")]
+    msg["To"]      = ", ".join(to_list)
     msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
     try:
-        recipients = [r.strip() for r in EMAIL_TO.split(",")]
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(EMAIL_FROM, EMAIL_PASSWORD)
-            smtp.sendmail(EMAIL_FROM, recipients, msg.as_string())
-        print(f"[email] Digest sent to {recipients}.")
+            smtp.sendmail(EMAIL_FROM, to_list, msg.as_string())
+        print(f"[email] Digest sent to {to_list}.")
         for entry in _pending.values():
             update_listing_status(entry["listing_id"], "alerted")
     except Exception as e:

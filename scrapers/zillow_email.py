@@ -12,9 +12,9 @@ import re
 import hashlib
 from bs4 import BeautifulSoup
 
-from config import ZILLOW_EMAIL_SENDER, FILTERS
+from config import ZILLOW_EMAIL_SENDER
 from scrapers.email_reader import fetch_unread, get_html_body, get_email_date, get_email_subject
-from core.geo import geocode_full, within_radius
+from core.geo import geocode_full
 from core.db import has_seen_email_uid, add_seen_email_uid
 
 
@@ -195,17 +195,6 @@ def scrape() -> list[dict]:
             continue
 
         for listing in raw_listings:
-            # Apply price/beds pre-filter before geocoding (save API calls)
-            price, beds = listing.get("price"), listing.get("beds")
-            if price and FILTERS.get("max_price") and price > FILTERS["max_price"]:
-                continue
-            if price and FILTERS.get("min_price") and price < FILTERS["min_price"]:
-                continue
-            if beds is not None and FILTERS.get("max_beds") and beds > FILTERS["max_beds"]:
-                continue
-            if beds is not None and FILTERS.get("min_beds") and beds < FILTERS["min_beds"]:
-                continue
-
             # Geocode address → lat/lng + clean formatted_address
             if listing["address"]:
                 lat, lng, fmt_addr = geocode_full(listing["address"])
@@ -220,10 +209,7 @@ def scrape() -> list[dict]:
                 print(f"  [zillow_email] no address found, skipping listing {listing['url']}")
                 continue
 
-            if not within_radius(listing["lat"], listing["lng"]):
-                continue
-
             results.append(listing)
 
-    print(f"[zillow_email] Found {len(results)} listings after filtering")
+    print(f"[zillow_email] Parsed {len(results)} listings")
     return results
