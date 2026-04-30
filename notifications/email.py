@@ -29,7 +29,7 @@ _pending: dict = {}
 # ── Formatting ─────────────────────────────────────────────────
 
 def _html_alert(listing: dict, scam_score: int, scam_flags: list,
-                apply_url: str, skip_url: str) -> str:
+                apply_url: str = "", skip_url: str = "") -> str:
     beds  = listing.get("beds")
     baths = listing.get("baths")
     price = listing.get("price")
@@ -88,15 +88,7 @@ def _html_alert(listing: dict, scam_score: int, scam_flags: list,
 
         {"<p style='color:#555;font-size:14px;'>" + desc + ("…" if len(listing.get("description","")) > 400 else "") + "</p>" if desc else ""}
 
-        <div style="margin:20px 0;">
-            <a href="{apply_url}" style="background:#1a73e8;color:white;padding:10px 24px;border-radius:4px;text-decoration:none;margin-right:12px;font-weight:bold;">
-                ✅ Apply
-            </a>
-            <a href="{skip_url}" style="background:#e8eaed;color:#444;padding:10px 24px;border-radius:4px;text-decoration:none;font-weight:bold;">
-                ❌ Skip
-            </a>
-            {"&nbsp;&nbsp;<a href='" + url + "' style='color:#1a73e8;'>View listing →</a>" if url else ""}
-        </div>
+        {"<div style='margin:20px 0;'><a href='" + url + "' style='background:#1a73e8;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;'>View Listing →</a></div>" if url else ""}
 
         {cover_html}
 
