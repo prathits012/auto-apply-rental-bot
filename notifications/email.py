@@ -158,7 +158,7 @@ def clear_pending():
     _pending.clear()
 
 
-def send_digest(recipients: list[str] | None = None):
+def send_digest(recipients=None):
     """
     Send one digest email containing all pending listings.
     Call this once at the end of each pipeline run.
